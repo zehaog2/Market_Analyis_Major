@@ -11,7 +11,7 @@
 - 2025 YoY Yield: 40%
 
 ## Resources
-- [insider trading](https://www.insiderdashboard.com/?tab=insider-trading-buys-sells)
+- [Insider trading](https://www.insiderdashboard.com/?tab=insider-trading-buys-sells)
 - [FED rate](https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html)
 - [Earnings Calendar](https://earningshub.com/earnings-calendar/this-month)
 - [Correlation Finder](https://www.portfoliovisualizer.com/asset-correlations?s=y&sl=5Pc1Rn5TUqsb9Xl7tbDnLS)
