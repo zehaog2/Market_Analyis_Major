@@ -6,17 +6,12 @@
 ## Portfolio
 - Account Opening: Nov 2024.
 - As of Oct, 2025: 
-- Top Holdings: GME, SILJ, CC, ONDS, INTC
+- Top Holdings: GME, SILJ, CC
 - - Cash position: 13%
 - 2025 YoY Yield: 41%
 
 ## Resources
-- [Insider trading](https://www.insiderdashboard.com/?tab=insider-trading-buys-sells)
-- [FED rate](https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html)
-- [Earnings Calendar](https://earningshub.com/earnings-calendar/this-month)
-- [Correlation Finder](https://www.portfoliovisualizer.com/asset-correlations?s=y&sl=5Pc1Rn5TUqsb9Xl7tbDnLS)
-- [Prediction Market](https://polymarket.com/)
-
+- See repo Market_Analysis_Minor
 
 ## USEFUL command lines
 ```
