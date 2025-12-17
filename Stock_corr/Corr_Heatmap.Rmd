@@ -1,0 +1,218 @@
+---
+title: "Portfolio Correlation Heatmap"
+output: html_notebook
+---
+
+# Portfolio Correlation Analysis
+
+This notebook generates a correlation heatmap for stocks in your portfolio, showing how they move together over different time periods.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+# Load required libraries
+library(quantmod)
+library(jsonlite)
+library(ggplot2)
+library(reshape2)
+library(corrplot)
+library(RColorBrewer)
+```
+
+## Load Portfolio Configuration
+
+```{r load_config}
+# Load config.json
+config_file <- "config.json"
+
+if(!file.exists(config_file)) {
+  stop("ERROR: config.json not found in working directory!")
+}
+
+config <- fromJSON(config_file)
+tickers <- config$portfolio$stocks
+
+# Clean and validate tickers
+tickers <- toupper(trimws(tickers))
+tickers <- tickers[!is.na(tickers) & tickers != ""]
+
+cat("Portfolio loaded from config.json\n")
+cat("Number of stocks:", length(tickers), "\n")
+cat("Tickers:", paste(tickers, collapse = ", "), "\n")
+```
+
+## Configuration Parameters
+
+```{r parameters}
+# Analysis parameters
+years_lookback <- 2  # Years of historical data
+correlation_window <- 60  # Rolling correlation window (trading days)
+
+# Calculate date range
+end_date <- Sys.Date()
+start_date <- end_date - (years_lookback * 365)
+
+cat("\nAnalysis Configuration:\n")
+cat("Date range:", as.character(start_date), "to", as.character(end_date), "\n")
+cat("Correlation window:", correlation_window, "days\n")
+```
+
+## Fetch Stock Data
+
+```{r fetch_data}
+# Function to safely fetch stock data
+get_data_safe <- function(symbol, start_date, end_date) {
+  tryCatch({
+    data <- getSymbols(symbol, src = "yahoo", 
+                      from = start_date, to = end_date, 
+                      auto.assign = FALSE, warnings = FALSE)
+    return(data)
+  }, error = function(e) {
+    return(NULL)
+  })
+}
+
+# Fetch data for all stocks
+cat("\nFetching stock data...\n")
+stock_data_list <- list()
+valid_tickers <- character(0)
+
+for(ticker in tickers) {
+  cat(sprintf("  %s...", ticker))
+  data <- get_data_safe(ticker, start_date, end_date)
+  
+  if(!is.null(data)) {
+    stock_data_list[[ticker]] <- data
+    valid_tickers <- c(valid_tickers, ticker)
+    cat(" OK\n")
+  } else {
+    cat(" FAILED\n")
+  }
+}
+
+if(length(valid_tickers) < 2) {
+  stop("ERROR: Need at least 2 valid stocks for correlation analysis")
+}
+
+cat("\nSuccessfully loaded", length(valid_tickers), "stocks\n")
+```
+
+## Calculate Returns
+
+```{r calculate_returns}
+# Calculate daily log returns for each stock
+returns_list <- list()
+
+for(ticker in valid_tickers) {
+  data <- stock_data_list[[ticker]]
+  prices <- if(ncol(data) >= 6) Ad(data) else Cl(data)
+  returns <- diff(log(prices))
+  returns_list[[ticker]] <- na.omit(returns)
+}
+
+# Find common dates across all stocks
+common_dates <- Reduce(intersect, lapply(returns_list, index))
+
+cat("Common trading days:", length(common_dates), "\n")
+
+# Align all returns to common dates
+returns_matrix <- do.call(cbind, lapply(valid_tickers, function(ticker) {
+  returns_list[[ticker]][common_dates]
+}))
+
+colnames(returns_matrix) <- valid_tickers
+
+cat("Returns matrix dimensions:", nrow(returns_matrix), "x", ncol(returns_matrix), "\n")
+```
+
+## Calculate Overall Correlation Matrix
+
+```{r overall_correlation}
+# Calculate correlation matrix for entire period
+correlation_matrix <- cor(returns_matrix, use = "complete.obs")
+
+cat("\nOverall Correlation Matrix (", years_lookback, " years):\n", sep = "")
+print(round(correlation_matrix, 3))
+
+# Calculate Average Portfolio Correlation (APC)
+# Average of all pairwise correlations (excluding diagonal)
+upper_tri_indices <- upper.tri(correlation_matrix)
+apc <- mean(correlation_matrix[upper_tri_indices])
+
+cat("\nAverage Portfolio Correlation (APC):", round(apc, 3), "\n")
+cat("Interpretation: ")
+if(apc < 0.3) {
+  cat("Well diversified\n")
+} else if(apc < 0.6) {
+  cat("Moderate diversification\n")
+} else {
+  cat("Concentrated exposure - stocks move together\n")
+}
+```
+
+## Visualize Correlation Heatmap
+
+```{r heatmap_plot, fig.width=10, fig.height=8}
+# Create correlation heatmap using ggplot2
+correlation_melted <- melt(correlation_matrix)
+colnames(correlation_melted) <- c("Stock1", "Stock2", "Correlation")
+
+# Create the heatmap
+p1 <- ggplot(correlation_melted, aes(x = Stock1, y = Stock2, fill = Correlation)) +
+  geom_tile(color = "white", size = 0.5) +
+  geom_text(aes(label = sprintf("%.2f", Correlation)), 
+            color = "black", size = 3, fontface = "bold") +
+  scale_fill_gradient2(
+    low = "#2166AC", mid = "white", high = "#B2182B",
+    midpoint = 0, limit = c(-1, 1),
+    name = "Correlation"
+  ) +
+  labs(
+    title = "Portfolio Correlation Matrix",
+    subtitle = paste0(years_lookback, "-Year Period (", 
+                     format(start_date, "%Y-%m-%d"), " to ", 
+                     format(end_date, "%Y-%m-%d"), ")"),
+    x = "", y = "",
+    caption = paste0("Average Portfolio Correlation: ", round(apc, 3))
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray40"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10, face = "bold"),
+    axis.text.y = element_text(size = 10, face = "bold"),
+    panel.grid = element_blank(),
+    plot.caption = element_text(size = 11, face = "bold", hjust = 0.5)
+  ) +
+  coord_fixed()
+
+print(p1)
+```
+
+## Identify High and Low Correlation Pairs
+
+```{r correlation_pairs}
+# Extract upper triangle (avoid duplicates)
+upper_tri <- upper.tri(correlation_matrix)
+correlation_pairs <- data.frame(
+  Stock1 = rep(valid_tickers, each = length(valid_tickers))[upper_tri],
+  Stock2 = rep(valid_tickers, length(valid_tickers))[upper_tri],
+  Correlation = correlation_matrix[upper_tri]
+)
+
+# Sort by correlation
+correlation_pairs <- correlation_pairs[order(-correlation_pairs$Correlation), ]
+
+cat("\n=== Highest Correlations (Top 5) ===\n")
+print(head(correlation_pairs, 10), row.names = FALSE)
+
+# Identify high correlation pairs (> 0.7)
+high_corr_pairs <- correlation_pairs[correlation_pairs$Correlation > 0.7, ]
+if(nrow(high_corr_pairs) > 0) {
+  cat("\n=== WARNING: High Correlation Pairs (>0.7) ===\n")
+  cat("These stocks move very similarly - may represent concentrated bets:\n")
+  print(high_corr_pairs, row.names = FALSE)
+} else {
+  cat("\n✓ No high correlation pairs (>0.7) detected\n")
+}
+```
